@@ -1,12 +1,16 @@
 #ifndef HEADER_VMAC_H
 #define HEADER_VMAC_H
 
+
+//#define ALIGN( x )
+
 /* --------------------------------------------------------------------------
  * VMAC and VHASH Implementation by Ted Krovetz (tdk@acm.org) and Wei Dai.
- * This implementation is herby placed in the public domain.
+ * This implementation is hereby placed in the public domain.
  * The authors offers no warranty. Use at your own risk.
  * Please send bug reports to the authors.
  * Last modified: 17 APR 08, 1700 PDT
+ * https://eprint.iacr.org/2007/338.pdf
  * ----------------------------------------------------------------------- */
 
 /* --------------------------------------------------------------------------
@@ -51,19 +55,14 @@
  * following may need adaptation if you are not running a C99 or
  * Microsoft C environment.
  * ----------------------------------------------------------------------- */
-#ifndef VMAC_USE_STDINT
 #define VMAC_USE_STDINT 1  /* Set to zero if system has no stdint.h        */
-#endif
-
-#if VMAC_USE_STDINT && !_MSC_VER /* Try stdint.h if non-Microsoft          */
+ 
+#if VMAC_USE_STDINT && (!defined(_MSC_VER) || _MSC_VER >= 1600) /* Try stdint.h if non-ancient-Microsoft  */
 #ifdef  __cplusplus
 #define __STDC_CONSTANT_MACROS
 #endif
 #include <stdint.h>
-#ifndef UINT64_C
-#define UINT64_C(v) v ## ULL
-#endif
-#elif (_MSC_VER)                  /* Microsoft C does not have stdint.h    */
+#elif defined(_MSC_VER) && (_MSC_VER < 1600) /* Microsoft C < 2010 does not have stdint.h    */
 typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
 #define UINT64_C(v) v ## UI64
@@ -87,8 +86,7 @@ typedef unsigned long long uint64_t;
 #define LTC_NO_CIPHERS
 #define   LTC_RIJNDAEL
 #define     ENCRYPT_ONLY
-#include "crypt/crypt_argchk.c"
-#include "ciphers/aes/aes.c"
+#include "tomcrypt.h"
 
 typedef symmetric_key aes_int_key;
 
@@ -109,8 +107,10 @@ typedef AES_KEY aes_int_key;
 
 #else
 
-#include "rijndael-alg-fst.h"
-typedef u32 aes_int_key[4*(VMAC_KEY_LEN/32+7)];
+extern "C" {
+  #include "rijndael-alg-fst.h"
+  typedef u32 aes_int_key[4*(VMAC_KEY_LEN/32+7)];
+}
 
 #define aes_encryption(in,out,int_key)                  \
 	    	rijndaelEncrypt((u32 *)(int_key),           \
@@ -157,17 +157,15 @@ extern "C" {
  * to produce the output.
  *
  * Requirements:
- * - The first bit of the nonce buffer n must be 0. An i byte nonce, is made
- *   as the first 16-i bytes of n being zero, and the final i the nonce.
- * - vhash_update MUST have mbytes be a positive multiple of VMAC_NHBYTES
- *
- * The following requirements was removed by the changes made by Bulat Ziganshin:
  * - On 32-bit architectures with SSE2 instructions, ctx and m MUST be
  *   begin on 16-byte memory boundaries.
  * - m MUST be your message followed by zeroes to the nearest 16-byte
  *   boundary. If m is a length multiple of 16 bytes, then it is already
  *   at a 16-byte boundary and needs no padding. mbytes should be your
- *   message length without any padding.
+ *   message length without any padding. 
+ * - The first bit of the nonce buffer n must be 0. An i byte nonce, is made
+ *   as the first 16-i bytes of n being zero, and the final i the nonce.
+ * - vhash_update MUST have mbytes be a positive multiple of VMAC_NHBYTES
  * ----------------------------------------------------------------------- */
 
 #define vmac_update vhash_update
@@ -187,8 +185,15 @@ uint64_t vhash(unsigned char m[],
           uint64_t *tagl,
           vmac_ctx_t *ctx);
 
+void VHASH_32( const void * key, int len, uint32_t seed, void * res );
+void VHASH_PADDED_32( const void * key, int len, uint32_t seed, void * res );
+void VHASH_64( const void * key, int len, uint32_t seed, void * res );
+void VHASH_PADDED_64( const void * key, int len, uint64_t seed, void * res );
+void VHASH_PADDED_32_but_hashing(const void * key, int len, uint32_t seed, void * res);
+void VHASH_PADDED_64_but_hashing(const void * key, int len, uint64_t seed, void * res);
+
 /* --------------------------------------------------------------------------
- * When passed a VMAC_KEY_LEN bit user_key, this function initialazies ctx.
+ * When passed a VMAC_KEY_LEN bit user_key, this function initializes ctx.
  * ----------------------------------------------------------------------- */
 
 void vmac_set_key(unsigned char user_key[], vmac_ctx_t *ctx);
@@ -201,8 +206,11 @@ void vhash_abort(vmac_ctx_t *ctx);
 
 /* --------------------------------------------------------------------- */
 
+void VHASH_init();
+  
 #ifdef  __cplusplus
 }
 #endif
+
 
 #endif /* HEADER_AES_H */

@@ -7,6 +7,10 @@
  * ----------------------------------------------------------------------- */
 
 #include "vmac.h"
+#if VMAC_USE_LIB_TOM_CRYPT
+#include "crypt/crypt_argchk.c"
+#include "ciphers/aes/aes.c"
+#endif
 #include <string.h>
 #include <stdio.h>
 

@@ -4,19 +4,8 @@
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LibTomCrypt: SHA-1, MD5 & Fortuna CPRNG  *********************************************************************************************************
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#define MD5_SIZE    16
-#define SHA1_SIZE   20
-#define SHA512_SIZE 64
-typedef unsigned char Digest[SHA1_SIZE];
-
-#define LTC_NO_HASHES
-#define   LTC_MD5
-#define   LTC_SHA1
-#define   LTC_SHA512
-#define LTC_NO_CIPHERS
-#define   LTC_RIJNDAEL
-#define     ENCRYPT_ONLY
+#include "hashes.h"
+#include "srep.h"
 
 // crypt_argchk.c and aes.c are included via vmac.h below
 //#include "crypt/crypt_argchk.c"
@@ -77,9 +66,9 @@ void cryptographic_prng (void *result, size_t size)
 // Hash functions ***********************************************************************************************************************************
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// hash содержит значение хеш-функции от последних L обработанных байт, для удобства обновления используется скользящая хеш-функция.
-// constructor(buf,L,seed) создаёт хеш, параметризованный seed, и инициализирует его первыми L байтами буфера
-// update(sub,add) выносит из хеша байт sub и добавляет байт add.
+// hash СЃРѕРґРµСЂР¶РёС‚ Р·РЅР°С‡РµРЅРёРµ С…РµС€-С„СѓРЅРєС†РёРё РѕС‚ РїРѕСЃР»РµРґРЅРёС… L РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹С… Р±Р°Р№С‚, РґР»СЏ СѓРґРѕР±СЃС‚РІР° РѕР±РЅРѕРІР»РµРЅРёСЏ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ СЃРєРѕР»СЊР·СЏС‰Р°СЏ С…РµС€-С„СѓРЅРєС†РёСЏ.
+// constructor(buf,L,seed) СЃРѕР·РґР°С‘С‚ С…РµС€, РїР°СЂР°РјРµС‚СЂРёР·РѕРІР°РЅРЅС‹Р№ seed, Рё РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµС‚ РµРіРѕ РїРµСЂРІС‹РјРё L Р±Р°Р№С‚Р°РјРё Р±СѓС„РµСЂР°
+// update(sub,add) РІС‹РЅРѕСЃРёС‚ РёР· С…РµС€Р° Р±Р°Р№С‚ sub Рё РґРѕР±Р°РІР»СЏРµС‚ Р±Р°Р№С‚ add.
 
 template <class ValueT>
 struct FakeRollingHash
@@ -90,7 +79,7 @@ struct FakeRollingHash
 };
 
 
-// Возведение в степень
+// Р’РѕР·РІРµРґРµРЅРёРµ РІ СЃС‚РµРїРµРЅСЊ
 template <class T>
 T power (T base, unsigned n)
 {
@@ -126,37 +115,30 @@ struct PolynomialHash
   }
 };
 
-template <class ValueT>
-struct PolynomialRollingHash
-{
-  operator ValueT()  {return value;}
-  ValueT value, PRIME, PRIME2, PRIME3, PRIME4, PRIME5, PRIME6, PRIME7, PRIME8, PRIME_L, PRIME_L1, PRIME_L2, PRIME_L3;
-  int L;
 
-  PolynomialRollingHash (int _L, ValueT seed)
+template <class ValueT>
+PolynomialRollingHash<ValueT>::PolynomialRollingHash (int _L, ValueT seed)
   {
     L = _L;
     PRIME8 = seed * (PRIME7 = seed * (PRIME6 = seed * (PRIME5 = seed * (PRIME4 = seed * (PRIME3 = seed * (PRIME2 = seed * (PRIME = seed)))))));
     PRIME_L3 = seed * (PRIME_L2 = seed * (PRIME_L1 = seed * (PRIME_L = power(PRIME,L))));
   }
-
-  PolynomialRollingHash (void *buf, int _L, ValueT seed)
+template <class ValueT>
+PolynomialRollingHash<ValueT>::PolynomialRollingHash (void *buf, int _L, ValueT seed)
   {
     L = _L;
     PRIME8 = seed * (PRIME7 = seed * (PRIME6 = seed * (PRIME5 = seed * (PRIME4 = seed * (PRIME3 = seed * (PRIME2 = seed * (PRIME = seed)))))));
     PRIME_L3 = seed * (PRIME_L2 = seed * (PRIME_L1 = seed * (PRIME_L = power(PRIME,L))));
     moveto (buf);
   }
-
-  void update (BYTE sub, BYTE add)
+template <class ValueT>
+void PolynomialRollingHash<ValueT>::update (BYTE sub, BYTE add)
   {
     value = value*PRIME + add - PRIME_L*sub;
   }
 
-  // Roll hash by N==power(2,x) bytes
-  template <int N>
-  void update (void *_ptr)
-  {
+template <class ValueT> template<int N>
+void PolynomialRollingHash<ValueT>::update (void *_ptr){
     BYTE *ptr = (BYTE*) _ptr;
     switch(N%4)
     {
@@ -175,9 +157,6 @@ struct PolynomialRollingHash
       value = value*PRIME4 + PRIME3*ptr[N%4+L] + PRIME2*ptr[N%4+L+1] + PRIME*ptr[N%4+L+2] + ptr[N%4+L+3]
                            - PRIME_L3*ptr[N%4+0] - PRIME_L2*ptr[N%4+1] - PRIME_L1*ptr[N%4+2] - PRIME_L*ptr[N%4+3];
   }
-
-  void moveto (void *_buf);
-};
 
 template <class ValueT>
 void PolynomialRollingHash<ValueT>::moveto (void *_buf)
@@ -324,24 +303,11 @@ void compute_siphash (void *key, void *buf, int size, void *result)
 // VHASH: keyed cryptographic hash ******************************************************************************************************************
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define VMAC_TAG_LEN     128  /* Requesting VMAC-128 algorithm (instead of VMAC-64) */
-#define VMAC_KEY_LEN     256  /* Must be 128, 192 or 256 (AES key size)        */
-#define VMAC_NHBYTES     4096 /* Must 2^i for any 3 < i < 13. Standard = 128   */
-#define VMAC_USE_LIB_TOM_CRYPT 1
 #include "vmac/vmac.c"
-#define VMAC_ALIGNMENT   16   /* SSE-compatible memory alignment */
-#define VMAC_TAG_LEN_BYTES (VMAC_TAG_LEN/CHAR_BIT)
-#define VMAC_KEY_LEN_BYTES (VMAC_KEY_LEN/CHAR_BIT)
 
-struct VHash
-{
-  bool initialized;
-  ALIGN(VMAC_ALIGNMENT) vmac_ctx_t ctx;
-
-  VHash() : initialized(false) {}
-
+  VHash::VHash() : initialized(false) {}
   // Initialize ctx
-  void init (void *seed = NULL)
+  void VHash::init (void *seed )
   {
     if (!initialized || seed)
     {
@@ -354,7 +320,7 @@ struct VHash
   }
 
   // Return hash value for the buffer
-  void compute (const void *ptr, size_t size, void *result)
+  void VHash::compute (const void *ptr, size_t size, void *result)
   {
     uint64_t res, tagl;
     init();
@@ -365,7 +331,6 @@ struct VHash
     if (VMAC_TAG_LEN==128)
       ((uint64_t*)result)[1] = tagl;
   }
-};
 
 void* new_vhash (void *seed, int size)
 {
@@ -382,17 +347,13 @@ void compute_vhash (void *hash, void *buf, int size, void *result)
 }
 
 
-// Using VHash instead of SHA-1 for digest
-struct VDigest
-{
-  VHash vhash1, vhash2;
-  void init()  {vhash1.init(); vhash2.init();}
-  void compute (const void *ptr, size_t size, void *result)
+
+  void VDigest::init()  {vhash1.init(); vhash2.init();}
+  void VDigest::compute (const void *ptr, size_t size, void *result)
   {
     vhash1.compute (ptr, size, result);
     vhash2.compute (ptr, size, (BYTE*)result + sizeof(Digest) - VMAC_TAG_LEN_BYTES);
   }
-};
 
 
 
@@ -400,29 +361,13 @@ struct VDigest
 // Hash descriptors *********************************************************************************************************************************
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Function returning hash object initialized by the provided seed
-typedef void* (*new_hash_t) (void *seed, int size);
-
-// Hash function processing the (buf,size) and storing computed hash value to the result
-typedef void (*hash_func_t) (void *hash, void *buf, int size, void *result);
-
-// Description for various hash algorithms
-struct hash_descriptor {
-  char*        hash_name;           // name used in the -hash=... option
-  unsigned     hash_num;            // numeric tag stored in the archive header
-  unsigned     hash_seed_size;      // additional bytes stored in the archive header (seed value for randomized hashes)
-  unsigned     hash_size;           // bytes stored in the each block (hash value)
-  new_hash_t   new_hash;            // create hash object
-  hash_func_t  hash_func;           // hash function
-} hash_descriptors[] = {{"md5",     0,  0,                      MD5_SIZE,               0,            compute_md5},
+struct hash_descriptor hash_descriptors[] = {{"md5",     0,  0,                      MD5_SIZE,               0,            compute_md5},
                         {"",        1,  0,                      MD5_SIZE,               0,            0},
                         {"sha1",    2,  0,                      SHA1_SIZE,              0,            compute_sha1},
                         {"sha512",  3,  0,                      SHA512_SIZE,            0,            compute_sha512},
                         {"vmac",    4,  VMAC_KEY_LEN_BYTES,     VMAC_TAG_LEN_BYTES,     new_vhash,    compute_vhash},
                         {"siphash", 5,  SIPHASH_KEY_LEN_BYTES,  SIPHASH_TAG_LEN_BYTES,  new_siphash,  compute_siphash},
                        };
-
-const char *DEFAULT_HASH = "vmac",  *HASH_LIST = "vmac(default)/siphash/md5/sha1/sha512";
 
 // Find hash descriptor by the hash name
 struct hash_descriptor *hash_by_name (const char *hash_name, int &errcode)

@@ -23,10 +23,10 @@
 #ifndef LTC_NO_PROTOTYPES
 
 /* you can change how memory allocation works ... */
-LTC_EXPORT void * LTC_CALL XMALLOC(size_t n);
-LTC_EXPORT void * LTC_CALL XREALLOC(void *p, size_t n);
-LTC_EXPORT void * LTC_CALL XCALLOC(size_t n, size_t s);
-LTC_EXPORT void LTC_CALL XFREE(void *p);
+LTC_EXPORT void * LTC_CALL XMALLOC(size_t n) noexcept;
+LTC_EXPORT void * LTC_CALL XREALLOC(void *p, size_t n) noexcept;
+LTC_EXPORT void * LTC_CALL XCALLOC(size_t n, size_t s) noexcept;
+LTC_EXPORT void LTC_CALL XFREE(void *p) noexcept;
 
 LTC_EXPORT void LTC_CALL XQSORT(void *base, size_t nmemb, size_t size, int(*compar)(const void *, const void *));
 

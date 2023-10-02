@@ -4,6 +4,7 @@
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Single block compressor for slow methods (-m3..-m5) using matching with fixed-size blocks ********************************************************
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include "srep.h"
 
 bool record_match (bool ROUND_MATCHES, unsigned L, unsigned MIN_MATCH, unsigned BASE_LEN, Offset block_start, HashTable &h, char *buf, int block_size, STAT *&stat, unsigned last_match_end, unsigned &match_end, unsigned &literal_bytes, unsigned i, Chunk k)
 {
