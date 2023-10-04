@@ -18,6 +18,9 @@ static const char *program_homepage = "http://freearc.org/research/SREP39.aspx";
 #include "Compression.h"
 #include "MultiThreading.h"
 
+#include "util.hpp"
+typedef void (*DecompressCallback)(const char *buf, void *);
+
 // Constants defining compressed file format
 const uint SREP_SIGNATURE = 0x50455253;
 const uint SREP_FORMAT_VERSION1 = 1;
@@ -182,14 +185,20 @@ void signal_handler(int);
     #pragma warning Unknown dynamic link import/export semantics.
 #endif
 
+struct DecompressResult{
+  void* buf;
+  size_t size;
+  int error;
+};
+
 #ifdef __cplusplus
 extern "C"{
 #endif
 EXPORT int decompress_or_info(FILE *fin, FILE *fout,
                        struct hash_descriptor *selected_hash,
                        const int64 vm_mem, const Offset filesize,
-                       const unsigned maximum_save, const FILENAME& finame,
-                       const FILENAME &foutname, const COMMAND_MODE cmdmode,
+                       const unsigned maximum_save, const FILENAME finame,
+                       const FILENAME foutname, const COMMAND_MODE cmdmode,
                        const unsigned bufsize = 8 * mb,
                        const unsigned vm_block = 8 * mb);
 EXPORT int decompress_or_info_mem(void* bufin, const size_t szin, const char* fout,
@@ -197,6 +206,19 @@ EXPORT int decompress_or_info_mem(void* bufin, const size_t szin, const char* fo
                        const int64 vm_mem, 
                        const unsigned maximum_save, const bool is_out_seekable, const bool is_info_mode,
                        const unsigned bufsize, const unsigned vm_block);
+EXPORT int decompress_or_info_mem2mem(void* bufin, const size_t szin, void* bufout, const size_t capout,
+                       struct hash_descriptor *selected_hash,
+                       const int64 vm_mem, 
+                       const unsigned maximum_save, const bool is_out_seekable, const bool is_info_mode,
+                       const unsigned bufsize, const unsigned vm_block);
+
+
+const size_t decompress_or_info_intrnl_p(Readable *fin, Writable *fout, const DecompressCallback callback,
+                        void *opaque, struct hash_descriptor *selected_hash,
+                        const int64 vm_mem, const Offset filesize,
+                        const unsigned maximum_save, const bool is_out_seekable,
+                        const bool is_info_mode, const unsigned bufsize,
+                        const unsigned vm_block, int* errcode);
 #ifdef __cplusplus
 }//extern "C"
 #endif

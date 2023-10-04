@@ -1,7 +1,6 @@
 #include "srep.h"
 #include "util.hpp"
 
-typedef void (*DecompressCallback)(const char *buf, void *);
 
 inline int decompress_main(
     bool &finished, int &errcode, Readable &fin, Writable &fout,
@@ -145,16 +144,16 @@ cleanup:
   return errcode;
 }
 
-int decompress_or_info2(Readable &fin, Writable &fout, DecompressCallback callback,
-                        void *opaque, struct hash_descriptor *selected_hash,
+const size_t decompress_or_info_intrnl(Readable &fin, Writable &fout, const DecompressCallback callback,
+                        void *opaque, const struct hash_descriptor *selected_hash,
                         const int64 vm_mem, const Offset filesize,
                         const unsigned maximum_save, const bool is_out_seekable,
                         const bool is_info_mode, const unsigned bufsize,
-                        const unsigned vm_block) {
+                        const unsigned vm_block, int& errcode) {
   STAT header[MAX_HEADER_SIZE + MAX_HASH_SIZE];
   zeroArray(header);
   char temp1[100];
-  int errcode = 0, warnings = 0, verbosity = 2, io_accelerator = 1;
+  int warnings = 0, verbosity = 2, io_accelerator = 1;
   Offset origsize = 0, compsize = 0, ram = 0, max_ram = 0;
   bool print_pc = false;
   char *index_file = "", *tempfile = NULL, *DEFAULT_TEMPFILE = "srep-data.tmp",
@@ -372,6 +371,7 @@ int decompress_or_info2(Readable &fin, Writable &fout, DecompressCallback callba
       error(ERROR_IO, "Can't open tempfile %s for write", tempfile);
   } else {
     ftemp = &fout;
+  printf("Cur\n");
   }
 
   OperationStartGlobalTime = (LastGlobalTime = GetGlobalTime() - GlobalTime0);
@@ -391,9 +391,9 @@ int decompress_or_info2(Readable &fin, Writable &fout, DecompressCallback callba
   } // for
   if (is_info_mode)
     print_info("\n", max_ram, maximum_save, statsize, ROUND_MATCHES, filesize);
-  return 0;
+  return origsize;
 cleanup:
-  return -1;
+  return 0;
 }
 
 
@@ -404,15 +404,23 @@ extern "C"{
 EXPORT int decompress_or_info(FILE *fin, FILE *fout,
                        struct hash_descriptor *selected_hash,
                        const int64 vm_mem, const Offset filesize,
-                       const unsigned maximum_save, const FILENAME &finame,
-                       const FILENAME &foutname, const COMMAND_MODE cmdmode,
+                       const unsigned maximum_save, const FILENAME finame,
+                       const FILENAME foutname, const COMMAND_MODE cmdmode,
                        const unsigned bufsize, const unsigned vm_block) {
+  if (selected_hash==NULL){
+    int errcode = 0;
+    selected_hash = hash_by_name(DEFAULT_HASH, errcode);
+  }
   File fin_(fin);
   File fout_(fout);
   const bool is_out_seekable = strequ(foutname, "-") != 0;
-  return decompress_or_info2(fin_, fout_, NULL, NULL, selected_hash, vm_mem,
+
+  int errcode = 0;
+  size_t res = decompress_or_info_intrnl(fin_, fout_, NULL, NULL, selected_hash, vm_mem,
                              filesize, maximum_save, is_out_seekable,
-                             cmdmode == INFORMATION, bufsize, vm_block);
+                             cmdmode == INFORMATION, bufsize, vm_block, errcode);
+  if (res==0) return errcode;
+  return res;
 }
 
 
@@ -427,9 +435,44 @@ EXPORT int decompress_or_info_mem(void* bufin, const size_t szin, const char* fo
   }
   Cursor fin_(bufin, szin);
   File fout_(fout, "wb");
-  return decompress_or_info2(fin_, fout_, NULL, NULL, selected_hash, vm_mem,
+
+  int errcode = 0;
+  size_t res = decompress_or_info_intrnl(fin_, fout_, NULL, NULL, selected_hash, vm_mem,
                              szin, maximum_save, is_out_seekable,
-                             is_info_mode, bufsize, vm_block);
+                             is_info_mode, bufsize, vm_block,errcode);
+  if (res==0) return errcode;
+  return res;
+}
+
+EXPORT int decompress_or_info_mem2mem(void* bufin, const size_t szin, void* bufout, const size_t capout,
+                       struct hash_descriptor *selected_hash,
+                       const int64 vm_mem, 
+                       const unsigned maximum_save, const bool is_out_seekable, const bool is_info_mode,
+                       const unsigned bufsize, const unsigned vm_block) {
+  if (selected_hash==NULL){
+    int errcode = 0;
+    selected_hash = hash_by_name(DEFAULT_HASH, errcode);
+  }
+  Cursor fin_(bufin, szin);
+  Cursor fout_(bufout,0,capout);
+
+  int errcode = 0;
+  size_t res = decompress_or_info_intrnl(fin_, fout_, NULL, NULL, selected_hash, vm_mem,
+                             szin, maximum_save, is_out_seekable,
+                             is_info_mode, bufsize, vm_block,errcode);
+  if (res==0) return errcode;
+  return res;
+}
+const size_t decompress_or_info_intrnl_p(Readable *fin, Writable *fout, const DecompressCallback callback,
+                        void *opaque, struct hash_descriptor *selected_hash,
+                        const int64 vm_mem, const Offset filesize,
+                        const unsigned maximum_save, const bool is_out_seekable,
+                        const bool is_info_mode, const unsigned bufsize,
+                        const unsigned vm_block, int* errcode){
+  if (selected_hash==NULL){
+    selected_hash = hash_by_name(DEFAULT_HASH, *errcode);
+  }
+  return decompress_or_info_intrnl(*fin, *fout,callback,opaque,selected_hash,vm_mem,filesize,maximum_save, is_out_seekable,is_info_mode, bufsize,vm_block,*errcode);
 }
 
 #ifdef __cplusplus
